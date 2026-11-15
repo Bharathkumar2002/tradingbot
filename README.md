@@ -1,14 +1,18 @@
-# Moving-average crossover trading bot
+# Intraday moving-average crossover trading bot
 
-Trades one stock on an **Alpaca paper account** using a moving-average
-crossover:
+Watches one stock all day on an **Alpaca paper account** and trades on a
+moving-average crossover of **5-minute price bars**:
 
-- **Buy** when the short average (20-day) crosses **above** the long average (50-day).
-- **Sell** when the short average crosses **below** the long average.
+- **Buy** when the 20-bar average (last 100 minutes) crosses **above** the
+  50-bar average (last ~4 hours).
+- **Sell** when the 20-bar average crosses **below** the 50-bar average.
+- **At most 3 trades a day.** Buys and sells both count.
 
-A crossover needs two consecutive days. Yesterday the short average was on
-one side of the long average, and today it's on the other side. If the
-averages were already apart on both days, nothing happens.
+A crossover needs two consecutive bars. On one bar the short average is on
+one side of the long average, and on the next bar it's on the other side.
+
+Prices come from Alpaca's free real-time IEX feed, using the same keys as
+trading.
 
 ## Setup
 
@@ -24,61 +28,61 @@ cp .env.example .env      # then put your Alpaca paper keys in .env
 | Setting | Default | Meaning |
 |---|---|---|
 | `symbol` | `AAPL` | Stock to trade |
-| `short_window` | `20` | Fast moving average, in trading days |
-| `long_window` | `50` | Slow moving average, in trading days |
-| `trade_qty` | `1` | Shares per buy or sell |
-| `lookback_days` | `100` | Days of history downloaded from Yahoo Finance |
+| `bar_minutes` | `5` | Size of each price bar |
+| `short_window` | `20` | Fast moving average, in bars |
+| `long_window` | `50` | Slow moving average, in bars |
+| `trade_qty` | `1` | Shares per trade (and the most the bot will hold) |
+| `max_trades_per_day` | `3` | Daily order limit |
+| `lookback_bars` | `100` | Bars of history downloaded each check |
+| `signal_window_bars` | `3` | Act on a crossover from up to this many bars ago |
 
-## Running it
+## Automatic monitoring (GitHub Actions)
 
-```bash
-python bot.py --dry-run   # show today's signal; never trades
-python bot.py             # check once; place an order if there's a crossover
-python bot.py --loop      # keep running; check 15 min after every market close
-```
-
-Everything is logged to the screen and to `logs/bot.log`.
-
-`--trading-days-only` makes the bot do nothing on weekends and market holidays.
-
-## Automatic daily runs (GitHub Actions)
-
-`.github/workflows/daily-trade.yml` runs the bot every weekday at **9:30 AM ET**
-(the market open) on GitHub's servers. Your computer doesn't need to be on.
+`.github/workflows/market-monitor.yml` runs a check about every 5 minutes on
+weekdays, on GitHub's servers. Your computer and Claude don't need to be on.
+Outside market hours and on holidays each check just stops.
 
 **One-time setup:** add your Alpaca keys as repository secrets.
 GitHub → this repo → **Settings** → **Secrets and variables** → **Actions** →
-**New repository secret**, twice:
-
-| Name | Value |
-|---|---|
-| `ALPACA_API_KEY` | your Alpaca paper key ID |
-| `ALPACA_SECRET_KEY` | your Alpaca paper secret key |
+**New repository secret**: `ALPACA_API_KEY` and `ALPACA_SECRET_KEY`.
 
 **Checking results:**
-- **Actions tab → Daily trade → a run:** the summary page shows that morning's log.
-- **`bot-logs` branch → `logs/` folder:** one file per day (`2026-11-16.log`, ...),
-  kept permanently.
-- **Run it now:** Actions tab → Daily trade → **Run workflow**.
+- **`bot-logs` branch → `logs/`:** one file per trading day with every check
+  made during market hours, every order placed, and any errors.
+- **Actions tab → Market monitor:** each run's page shows that check's log.
+- **Run a check now:** Actions → Market monitor → **Run workflow**.
 
-GitHub sometimes starts scheduled runs 5–30 minutes late. The bot uses the
-most recent *completed* day's prices, so a late start only changes the fill
-price, not the signal.
+GitHub doesn't guarantee schedule timing. When it's busy, checks can start
+late or be skipped, so the real gap is often 5–15 minutes. The bot acts on
+any crossover from the last 3 bars (15 minutes), so a late check still
+catches it. Each crossover can only ever produce one order.
+
+## Running it yourself
+
+```bash
+python bot.py --dry-run             # show the current signal; never trades
+python bot.py --market-hours-only   # one check; does nothing if market closed
+python bot.py --loop                # check after every bar, all day, every day
+```
+
+Everything is logged to the screen and to `logs/bot.log`, timestamped in
+New York time.
 
 ## How it behaves
 
-- **Only closed days count.** If you run it during market hours, today's
-  unfinished price bar is ignored.
-- **Orders are market orders, good for the day.** A signal found after the
-  close is queued and fills at the next market open.
-- **No duplicate orders.** Each order's ID is tied to the crossover date
-  (for example `macross-AAPL-buy-2026-11-13`), so running the bot twice for the
-  same crossover places only one order. The bot also skips a signal if an
-  open order on the same side already exists.
-- **No short selling.** On a sell signal the bot sells up to `trade_qty`
-  shares you already hold. If you hold none, it does nothing.
-- **Paper trading only by default.** Setting `ALPACA_PAPER=false` (real money)
-  is refused unless you also pass `--allow-live`.
+- **Only finished bars count.** The bar that's still forming is ignored.
+- **Market orders.** They fill within seconds during market hours.
+- **Holds at most `trade_qty` shares.** A buy signal while already holding is
+  skipped. A sell signal sells what it holds, never more, so it never
+  short-sells.
+- **Daily limit.** The bot counts its own orders placed today (those whose ID
+  starts with `macross-`, excluding canceled or rejected ones). Once it
+  reaches `max_trades_per_day`, it logs the signal and skips it.
+- **No duplicate orders.** Each order's ID is tied to the bar where the
+  crossover happened, so checking the same crossover twice places one order.
+- **Positions are held overnight.** The bot doesn't sell at the close.
+- **Paper trading only by default.** `ALPACA_PAPER=false` (real money) is
+  refused unless you also pass `--allow-live`.
 
 ## Tests
 

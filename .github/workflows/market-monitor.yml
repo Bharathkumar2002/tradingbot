@@ -1,0 +1,86 @@
+# Checks AAPL for a moving-average crossover about every 5 minutes while the
+# US stock market is open, and trades on Alpaca paper (max 3 trades a day).
+#
+# GitHub schedules are in UTC and ignore daylight saving time, so this runs
+# every 5 minutes from 13:00 to 20:59 UTC on weekdays. That covers 9:30 AM -
+# 4:00 PM New York time both in summer and winter. The bot asks Alpaca whether
+# the market is open and does nothing if it isn't (early, late, or holiday).
+#
+# Each check's log line is shown on its run page under the Actions tab, and
+# saved to the `bot-logs` branch as logs/YYYY-MM-DD.log.
+
+name: Market monitor
+
+on:
+  schedule:
+    - cron: "*/5 13-20 * * 1-5"
+  workflow_dispatch: # lets you run a check by hand from the Actions tab
+
+concurrency:
+  group: market-monitor
+  cancel-in-progress: false
+
+permissions:
+  contents: write # needed to save logs to the bot-logs branch
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Run trading bot
+        env:
+          ALPACA_API_KEY: ${{ secrets.ALPACA_API_KEY }}
+          ALPACA_SECRET_KEY: ${{ secrets.ALPACA_SECRET_KEY }}
+          ALPACA_PAPER: "true"
+        run: python bot.py --market-hours-only
+
+      - name: Show log on the run summary
+        if: always()
+        run: |
+          {
+            echo "## Trading bot — $(TZ=America/New_York date '+%a %Y-%m-%d %H:%M %Z')"
+            echo '```'
+            cat logs/bot.log 2>/dev/null || echo "(no log written)"
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Save log to the bot-logs branch
+        # Skip the many "market is closed" checks before the open and after
+        # the close so the daily log only has market-hours activity — unless
+        # the run failed, which is always saved.
+        if: always()
+        run: |
+          if [ "${{ job.status }}" = "success" ] && grep -q "Market is closed right now" logs/bot.log 2>/dev/null; then
+            echo "Market closed; not saving this check."
+            exit 0
+          fi
+          day=$(TZ=America/New_York date +%Y-%m-%d)
+          git config --global user.name "trading-bot"
+          git config --global user.email "trading-bot@users.noreply.github.com"
+          if git ls-remote --exit-code --heads origin bot-logs >/dev/null; then
+            git fetch --depth 1 origin bot-logs
+            git worktree add logbook FETCH_HEAD
+            git -C logbook checkout -B bot-logs
+          else
+            git worktree add --orphan -b bot-logs logbook
+          fi
+          mkdir -p logbook/logs
+          if [ -s logs/bot.log ]; then
+            cat logs/bot.log >> "logbook/logs/$day.log"
+          else
+            echo "$(TZ=America/New_York date '+%Y-%m-%d %H:%M:%S %Z') ERROR check failed before logging; see run ${{ github.run_id }}" >> "logbook/logs/$day.log"
+          fi
+          git -C logbook add logs
+          git -C logbook commit -q -m "Bot log $day $(TZ=America/New_York date +%H:%M)"
+          git -C logbook push -q origin bot-logs

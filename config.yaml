@@ -4,13 +4,26 @@
 # Ticker to trade (must be tradable on Alpaca).
 symbol: AAPL
 
-# Moving-average windows, in trading days.
+# Size of each price bar, in minutes. The bot checks for a crossover after
+# every completed bar during market hours (9:30 AM - 4:00 PM ET).
+bar_minutes: 5
+
+# Moving-average windows, in bars. With 5-minute bars:
+#   20 bars = 100 minutes, 50 bars = 250 minutes (about 4 hours).
 short_window: 20   # fast average
 long_window: 50    # slow average (must be larger than short_window)
 
-# Shares to buy on a buy signal / sell on a sell signal.
+# Shares per trade. The bot never holds more than this many shares.
 trade_qty: 1
 
-# Trading days of price history to download from Yahoo Finance.
-# Must be at least long_window + 1 so a crossover can be detected.
-lookback_days: 100
+# Most orders the bot may place in one day (buys and sells both count).
+max_trades_per_day: 3
+
+# Bars of price history to download each check.
+# Must be at least long_window + 1.
+lookback_bars: 100
+
+# Act on a crossover that happened within this many most recent bars.
+# GitHub sometimes starts a check late or skips one, so 3 bars (15 minutes)
+# keeps the bot from missing a crossover between checks.
+signal_window_bars: 3
