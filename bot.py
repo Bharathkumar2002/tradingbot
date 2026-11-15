@@ -24,7 +24,7 @@ import yfinance as yf
 from alpaca.common.exceptions import APIError
 from alpaca.trading.client import TradingClient
 from alpaca.trading.enums import OrderSide, QueryOrderStatus, TimeInForce
-from alpaca.trading.requests import GetOrdersRequest, MarketOrderRequest
+from alpaca.trading.requests import GetCalendarRequest, GetOrdersRequest, MarketOrderRequest
 from dotenv import load_dotenv
 
 from strategy import Signal, detect_crossover
@@ -205,6 +205,12 @@ def run_once(cfg: Config, client: TradingClient | None) -> Signal:
     return signal
 
 
+def is_trading_day(client: TradingClient) -> bool:
+    """True if the US stock market is scheduled to open today (ET)."""
+    today = datetime.now(MARKET_TZ).date()
+    return bool(client.get_calendar(GetCalendarRequest(start=today, end=today)))
+
+
 def run_forever(cfg: Config, client: TradingClient) -> None:
     """Check now, then again shortly after every market close."""
     while True:
@@ -240,6 +246,10 @@ def main(argv: list[str] | None = None) -> None:
     parser.add_argument("--dry-run", action="store_true", help="show the signal without trading")
     parser.add_argument("--loop", action="store_true", help="keep running, checking after each market close")
     parser.add_argument("--allow-live", action="store_true", help="permit ALPACA_PAPER=false (real money)")
+    parser.add_argument(
+        "--trading-days-only", action="store_true",
+        help="do nothing if the market is closed today (weekend or holiday)",
+    )
     args = parser.parse_args(argv)
 
     setup_logging()
@@ -252,6 +262,9 @@ def main(argv: list[str] | None = None) -> None:
         return
 
     client = make_trading_client(args.allow_live)
+    if args.trading_days_only and not is_trading_day(client):
+        log.info("The market is closed today (weekend or holiday). Nothing to do.")
+        return
     if args.loop:
         run_forever(cfg, client)
     else:

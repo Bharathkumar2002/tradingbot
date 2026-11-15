@@ -39,12 +39,31 @@ python bot.py --loop      # keep running; check 15 min after every market close
 
 Everything is logged to the screen and to `logs/bot.log`.
 
-To run the one-off check on a schedule instead of using `--loop`, add a cron
-job for 4:30 PM ET on weekdays (this example is for a machine set to ET):
+`--trading-days-only` makes the bot do nothing on weekends and market holidays.
 
-```
-30 16 * * 1-5  cd /path/to/tradingbot && python bot.py
-```
+## Automatic daily runs (GitHub Actions)
+
+`.github/workflows/daily-trade.yml` runs the bot every weekday at **9:30 AM ET**
+(the market open) on GitHub's servers. Your computer doesn't need to be on.
+
+**One-time setup:** add your Alpaca keys as repository secrets.
+GitHub → this repo → **Settings** → **Secrets and variables** → **Actions** →
+**New repository secret**, twice:
+
+| Name | Value |
+|---|---|
+| `ALPACA_API_KEY` | your Alpaca paper key ID |
+| `ALPACA_SECRET_KEY` | your Alpaca paper secret key |
+
+**Checking results:**
+- **Actions tab → Daily trade → a run:** the summary page shows that morning's log.
+- **`bot-logs` branch → `logs/` folder:** one file per day (`2026-11-16.log`, ...),
+  kept permanently.
+- **Run it now:** Actions tab → Daily trade → **Run workflow**.
+
+GitHub sometimes starts scheduled runs 5–30 minutes late. The bot uses the
+most recent *completed* day's prices, so a late start only changes the fill
+price, not the signal.
 
 ## How it behaves
 
