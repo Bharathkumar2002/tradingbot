@@ -1,0 +1,16 @@
+# Moving-average crossover bot settings.
+# Edit these values to change what the bot trades. No code changes needed.
+
+# Ticker to trade (must be tradable on Alpaca).
+symbol: AAPL
+
+# Moving-average windows, in trading days.
+short_window: 20   # fast average
+long_window: 50    # slow average (must be larger than short_window)
+
+# Shares to buy on a buy signal / sell on a sell signal.
+trade_qty: 1
+
+# Trading days of price history to download from Yahoo Finance.
+# Must be at least long_window + 1 so a crossover can be detected.
+lookback_days: 100
