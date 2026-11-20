@@ -1,0 +1,4 @@
+2026-11-20 15:53:12 EST INFO Connecting to Alpaca (paper account)
+2026-11-20 15:53:12 EST INFO AAPL: 100 x 5-min bars, 11-19 14:00 to 11-20 15:45 | 20-bar vs 50-bar average
+2026-11-20 15:53:12 EST INFO No crossover at bar 2026-11-20 15:45 | close=344.61 | short 344.04 -> 344.02, long 345.10 -> 345.06
+2026-11-20 15:53:12 EST INFO Nothing to do.
